@@ -1,0 +1,331 @@
+// Prisma schema for Church Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  CHURCH_ADMIN
+  PASTOR
+  CHECKIN_STAFF
+  INVENTORY_MANAGER
+  DEPARTMENT_LEADER
+}
+
+enum MemberStatus {
+  VISITOR
+  NEW_MEMBER
+  CHURCH_MEMBER
+}
+
+enum FollowUpStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+}
+
+enum ServiceType {
+  MAIN_SERVICE
+  MIDWEEK
+  PRAYER
+  YOUTH
+  CHILDREN
+  SPECIAL_EVENT
+}
+
+enum EventStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryCondition {
+  NEW
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+  DAMAGED
+}
+
+enum InventoryAction {
+  ADD
+  REMOVE
+  ASSIGN
+  RETURN
+  ADJUST
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  password   String
+  role       Role
+  permissions String[] @default([])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // relations
+  followUpsAssigned FollowUp[] @relation("FollowUpAssignee")
+  inventoryLogs     InventoryLog[]
+  departmentsLed    Department[] @relation("DepartmentLeader")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  leader      User?    @relation("DepartmentLeader", fields: [leaderId], references: [id])
+  leaderId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members Member[]
+  volunteerRecords VolunteerRecord[]
+}
+
+model Member {
+  id           String        @id @default(uuid())
+  firstName    String
+  lastName     String
+  phone        String?
+  email        String?       @unique
+  gender       String?
+  primaryMembershipStatus MemberStatus @default(VISITOR)
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  departmentId String?
+  inChurch     Boolean       @default(false)
+  lastSeenAt   DateTime?
+  attendanceCount Int        @default(0)
+  dateOfBirth  DateTime?
+  joinedAt     DateTime?
+  baptizedHere Boolean       @default(false)
+  maritalStatus String @default("UNKNOWN")
+  area         String?
+  city         String?
+  region       String?
+  landmarkOrAddressLine String?
+  occupation   String?
+  workplaceName String?
+  hasFamilyMemberAtChurch Boolean @default(false)
+  familyMemberName String?
+  familyMemberPhone String?
+  familyRelationship String?
+  isDeleted    Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  attendances Attendance[]
+  followUps   FollowUp[]     @relation("MemberFollowUps")
+  updateTokens MemberUpdateToken[]
+  volunteerRecords VolunteerRecord[]
+  leadershipRecords LeadershipRecord[]
+  membershipStatuses MembershipStatusHistory[]
+  fellowships MemberFellowship[]
+}
+
+model Service {
+  id        String      @id @default(uuid())
+  name      String
+  type      ServiceType
+  date      DateTime
+  startTime DateTime?
+  endTime   DateTime?
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  attendance Attendance[]
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  member    Member   @relation(fields: [memberId], references: [id])
+  memberId  String
+  service   Service  @relation(fields: [serviceId], references: [id])
+  serviceId String
+  checkInAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@unique([memberId, serviceId])
+  @@index([serviceId, checkInAt])
+}
+
+model FollowUp {
+  id          String         @id @default(uuid())
+  member      Member         @relation("MemberFollowUps", fields: [memberId], references: [id])
+  memberId    String
+  reason      String
+  status      FollowUpStatus @default(PENDING)
+  assignedTo  User?          @relation("FollowUpAssignee", fields: [assignedToId], references: [id])
+  assignedToId String?
+  outcome     String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Event {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  status      EventStatus @default(PLANNED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model InventoryItem {
+  id           String             @id @default(uuid())
+  name         String
+  category     String
+  quantity     Int                @default(0)
+  reorderLevel Int                @default(0)
+  condition    InventoryCondition @default(GOOD)
+  location     String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  logs InventoryLog[]
+}
+
+model InventoryLog {
+  id          String          @id @default(uuid())
+  item        InventoryItem   @relation(fields: [itemId], references: [id])
+  itemId      String
+  action      InventoryAction
+  quantity    Int
+  performedBy User            @relation(fields: [performedById], references: [id])
+  performedById String
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([itemId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model MemberUpdateToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  member    Member   @relation(fields: [memberId], references: [id])
+  memberId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
+}
+
+model MemberInviteToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model VolunteerRecord {
+  id           String   @id @default(uuid())
+  member       Member   @relation(fields: [memberId], references: [id])
+  memberId     String
+  volunteerRole VolunteerRole @relation(fields: [volunteerRoleId], references: [id])
+  volunteerRoleId String
+  department   Department? @relation(fields: [departmentId], references: [id])
+  departmentId String?
+  ministryName String?
+  startDate    DateTime
+  endDate      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([volunteerRoleId])
+}
+
+model LeadershipRole {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leadershipRecords LeadershipRecord[]
+}
+
+model LeadershipRecord {
+  id               String         @id @default(uuid())
+  member           Member         @relation(fields: [memberId], references: [id])
+  memberId         String
+  leadershipRole   LeadershipRole @relation(fields: [leadershipRoleId], references: [id])
+  leadershipRoleId String
+  startDate        DateTime
+  endDate          DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([leadershipRoleId])
+}
+
+model VolunteerRole {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  volunteerRecords VolunteerRecord[]
+}
+
+model Fellowship {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+  members MemberFellowship[]
+}
+
+model MemberFellowship {
+  member     Member     @relation(fields: [memberId], references: [id])
+  memberId   String
+  fellowship Fellowship @relation(fields: [fellowshipId], references: [id])
+  fellowshipId String
+  joinedAt   DateTime @default(now())
+
+  @@id([memberId, fellowshipId])
+  @@index([fellowshipId])
+}
+
+model MembershipStatusHistory {
+  id         String       @id @default(uuid())
+  member     Member       @relation(fields: [memberId], references: [id])
+  memberId   String
+  status     MemberStatus
+  effectiveDate DateTime
+  endDate    DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([memberId, status])
+}
