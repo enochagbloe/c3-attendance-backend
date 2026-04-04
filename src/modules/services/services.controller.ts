@@ -3,6 +3,10 @@ import { servicesService } from './services.service';
 import { sendSuccess } from '../../utils/apiResponse';
 
 class ServicesController {
+  private getId(req: Request) {
+    return Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  }
+
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       const data = await servicesService.create(req.body);
@@ -23,7 +27,7 @@ class ServicesController {
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await servicesService.getById(req.params.id);
+      const data = await servicesService.getById(this.getId(req));
       return sendSuccess({ res, data });
     } catch (err) {
       return next(err);

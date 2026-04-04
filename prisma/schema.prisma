@@ -41,10 +41,18 @@ enum ServiceType {
 }
 
 enum EventStatus {
-  PLANNED
+  DRAFT
+  SCHEDULED
   ACTIVE
   COMPLETED
   CANCELLED
+  ARCHIVED
+}
+
+enum CheckInMode {
+  MANUAL
+  QR
+  BOTH
 }
 
 enum InventoryCondition {
@@ -92,6 +100,7 @@ model Department {
 
   members Member[]
   volunteerRecords VolunteerRecord[]
+  organizedEvents Event[]
 }
 
 model Member {
@@ -154,11 +163,14 @@ model Attendance {
   memberId  String
   service   Service  @relation(fields: [serviceId], references: [id])
   serviceId String
+  event     Event?   @relation(fields: [eventId], references: [id])
+  eventId   String?
   checkInAt DateTime @default(now())
   createdAt DateTime @default(now())
 
   @@unique([memberId, serviceId])
   @@index([serviceId, checkInAt])
+  @@index([eventId, checkInAt])
 }
 
 model FollowUp {
@@ -175,14 +187,34 @@ model FollowUp {
 }
 
 model Event {
-  id          String      @id @default(uuid())
-  title       String
-  description String?
-  startDate   DateTime
-  endDate     DateTime
-  status      EventStatus @default(PLANNED)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                    String       @id @default(uuid())
+  title                 String
+  type                  String
+  date                  DateTime
+  startTime             String
+  endTime               String
+  venue                 String
+  status                EventStatus  @default(SCHEDULED)
+  attendanceEnabled     Boolean      @default(false)
+  checkInMode           CheckInMode  @default(MANUAL)
+  description           String?
+  organizerDepartment   Department?  @relation(fields: [organizerDepartmentId], references: [id])
+  organizerDepartmentId String?
+  organizerName         String?
+  audience              String?
+  qrCheckInEnabled      Boolean      @default(false)
+  colorTag              String?
+  archivedAt            DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  attendances Attendance[]
+
+  @@index([date])
+  @@index([status, date])
+  @@index([type, date])
+  @@index([attendanceEnabled, date])
 }
 
 model InventoryItem {

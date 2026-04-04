@@ -46,6 +46,16 @@ Base path: `/api/v1`
 - `GET /services` — list services.
 - `GET /services/:id` — service details.
 
+## Events
+- `POST /events` — create an event for the calendar.
+- `GET /events` — list/query events for calendar views. Supports `search`, `type`, `status`, `startDate`, `endDate`, `attendanceEnabled`, `qrCheckInEnabled`.
+- `GET /events/:id` — full event details.
+- `PATCH /events/:id` — update an event.
+- `DELETE /events/:id` — delete an event if no attendance has been recorded.
+- `PATCH /events/:id/cancel` — cancel an event.
+- `PATCH /events/:id/archive` — archive an event.
+- `PATCH /events/:id/restore` — restore a cancelled/archived event back to scheduled.
+
 ## Inventory
 - `POST /inventory` — create item.
 - `GET /inventory` — list items.

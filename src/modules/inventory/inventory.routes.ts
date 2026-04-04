@@ -4,7 +4,7 @@ import { inventoryController } from './inventory.controller';
 import { authenticate, authorize } from '../../middleware/authenticate';
 import { validate } from '../../middleware/validate';
 import { Permissions } from '../auth/permissions';
-import { InventoryAction } from '@prisma/client';
+import { InventoryAction, InventoryCondition } from '@prisma/client';
 
 const router = Router();
 
@@ -14,7 +14,7 @@ const createSchema = z.object({
     category: z.string().min(1),
     quantity: z.number().int().nonnegative().optional(),
     reorderLevel: z.number().int().nonnegative().optional(),
-    condition: z.string().optional(),
+    condition: z.nativeEnum(InventoryCondition).optional(),
     location: z.string().optional(),
   }),
 });
