@@ -1,4 +1,4 @@
-import { InventoryAction } from '@prisma/client';
+import { InventoryAction, InventoryCondition } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/appError';
 
@@ -7,7 +7,7 @@ interface CreateItemInput {
   category: string;
   quantity?: number;
   reorderLevel?: number;
-  condition?: string;
+  condition?: InventoryCondition;
   location?: string | null;
 }
 

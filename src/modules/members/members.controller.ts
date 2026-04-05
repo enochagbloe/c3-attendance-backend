@@ -3,6 +3,10 @@ import { membersService } from './members.service';
 import { sendSuccess } from '../../utils/apiResponse';
 
 class MembersController {
+  private getId(req: Request) {
+    return Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  }
+
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       const member = await membersService.create(req.body);
@@ -26,7 +30,7 @@ class MembersController {
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const member = await membersService.getById(req.params.id);
+      const member = await membersService.getById(this.getId(req));
       return sendSuccess({ res, data: member });
     } catch (err) {
       return next(err);
@@ -35,7 +39,7 @@ class MembersController {
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const member = await membersService.update(req.params.id, req.body);
+      const member = await membersService.update(this.getId(req), req.body);
       return sendSuccess({ res, data: member, message: 'Member updated' });
     } catch (err) {
       return next(err);
@@ -44,7 +48,7 @@ class MembersController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      const member = await membersService.softDelete(req.params.id);
+      const member = await membersService.softDelete(this.getId(req));
       return sendSuccess({ res, data: member, message: 'Member deleted' });
     } catch (err) {
       return next(err);
@@ -54,7 +58,7 @@ class MembersController {
   async selfUpdateLink(req: Request, res: Response, next: NextFunction) {
     try {
       const { expiresInMinutes } = req.body as { expiresInMinutes?: number };
-      const data = await membersService.createSelfUpdateLink(req.params.id, expiresInMinutes || 60);
+      const data = await membersService.createSelfUpdateLink(this.getId(req), expiresInMinutes || 60);
       return sendSuccess({ res, data, message: 'Self-update link generated' });
     } catch (err) {
       return next(err);

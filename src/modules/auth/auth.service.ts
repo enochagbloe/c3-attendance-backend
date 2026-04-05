@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { env } from '../../config/env';
@@ -32,6 +32,12 @@ export interface AuthTokenPayload {
 }
 
 export class AuthService {
+  private signToken(payload: { userId: string; role: Role; permissions: string[] }) {
+    return jwt.sign(payload, env.jwtSecret, {
+      expiresIn: env.jwtExpiresIn as SignOptions['expiresIn'],
+    });
+  }
+
   async login({ email, password }: LoginInput): Promise<AuthTokenPayload> {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -45,15 +51,11 @@ export class AuthService {
 
     const permissions = Array.from(new Set([...(user.permissions || []), ...(rolePermissions[user.role] || [])]));
 
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        role: user.role,
-        permissions,
-      },
-      env.jwtSecret,
-      { expiresIn: env.jwtExpiresIn }
-    );
+    const token = this.signToken({
+      userId: user.id,
+      role: user.role,
+      permissions,
+    });
 
     return {
       token,
@@ -72,8 +74,6 @@ export class AuthService {
 
     // After first user, require signupKey to prevent public signups
     if (userCount > 0) {
-      // eslint-disable-next-line no-console
-      console.log('signupKey provided vs expected', signupKey, env.signupKey);
       if (!env.signupKey || signupKey !== env.signupKey) {
         throw new AppError('Invalid signup key', 403, 'SIGNUP_KEY_INVALID');
       }
@@ -103,15 +103,11 @@ export class AuthService {
 
     const permissions = Array.from(new Set([...(newUser.permissions || []), ...(rolePermissions[newUser.role] || [])]));
 
-    const token = jwt.sign(
-      {
-        userId: newUser.id,
-        role: newUser.role,
-        permissions,
-      },
-      env.jwtSecret,
-      { expiresIn: env.jwtExpiresIn }
-    );
+    const token = this.signToken({
+      userId: newUser.id,
+      role: newUser.role,
+      permissions,
+    });
 
     return {
       token,

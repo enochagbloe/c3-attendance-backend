@@ -1,8 +1,8 @@
-import { AnyZodObject, ZodError } from 'zod';
+import { ZodError, ZodObject, ZodRawShape } from 'zod';
 import { NextFunction, Request, Response } from 'express';
 import { sendError } from '../utils/apiResponse';
 
-export const validate = (schema: AnyZodObject) => (req: Request, res: Response, next: NextFunction) => {
+export const validate = (schema: ZodObject<ZodRawShape>) => (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = schema.parse({
       body: req.body,
@@ -14,7 +14,7 @@ export const validate = (schema: AnyZodObject) => (req: Request, res: Response, 
     return next();
   } catch (err) {
     if (err instanceof ZodError) {
-      const message = err.errors.map((e) => e.message).join('; ');
+      const message = err.issues.map((issue) => issue.message).join('; ');
       return sendError({ res, message, statusCode: 400, code: 'VALIDATION_ERROR' });
     }
     return next(err);
