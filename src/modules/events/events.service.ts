@@ -34,6 +34,8 @@ const eventInclude = {
   _count: {
     select: {
       attendances: true,
+      registrations: true,
+      checkIns: true,
     },
   },
 } satisfies Prisma.EventInclude;
@@ -216,7 +218,7 @@ class EventsService {
   async delete(id: string) {
     const event = await this.getExisting(id);
 
-    if (event._count.attendances > 0) {
+    if (event._count.attendances > 0 || event._count.checkIns > 0) {
       throw new AppError(
         'This event cannot be deleted because attendance has already been recorded. Cancel or archive it instead.',
         409,
