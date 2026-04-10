@@ -55,6 +55,12 @@ Base path: `/api/v1`
 - `PATCH /events/:id/cancel` — cancel an event.
 - `PATCH /events/:id/archive` — archive an event.
 - `PATCH /events/:id/restore` — restore a cancelled/archived event back to scheduled.
+- `POST /events/:id/register` — public event registration using `fullName`, `phoneNumber`, optional `email`.
+- `GET /events/:id/registrations` — admin/staff view of event registrations, supports `attendeeType`, `status`, `search`.
+- `POST /events/:id/check-in` — transactional attendee check-in; auto-registers if needed and prevents duplicates.
+- `GET /events/:id/attendance` — attendance list for an event, supports `attendeeType`, `method`, `search`, `checkedInFrom`, `checkedInTo`.
+- `GET /events/:id/attendance/summary` — totals for registered, checked-in, members, visitors, QR/manual, etc.
+- `GET /events/:id/attendance/timeline` — time-bucketed check-in counts for live dashboards, supports optional `bucketMinutes`.
 
 ## Inventory
 - `POST /inventory` — create item.

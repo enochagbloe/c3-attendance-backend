@@ -55,6 +55,37 @@ enum CheckInMode {
   BOTH
 }
 
+enum AttendeeType {
+  MEMBER
+  VISITOR
+  NEW_ATTENDEE
+}
+
+enum RegistrationSource {
+  PRE_EVENT_FORM
+  CHECKIN_AUTO
+  ADMIN_MANUAL
+}
+
+enum EventRegistrationStatus {
+  REGISTERED
+  CHECKED_IN
+  CANCELLED
+  NO_SHOW
+}
+
+enum CheckInMethod {
+  DESK
+  QR
+  MANUAL
+}
+
+enum CheckInSource {
+  SELF
+  STAFF
+  TABLET
+}
+
 enum InventoryCondition {
   NEW
   GOOD
@@ -86,6 +117,7 @@ model User {
   inventoryLogs     InventoryLog[]
   departmentsLed    Department[] @relation("DepartmentLeader")
   passwordResetTokens PasswordResetToken[]
+  eventCheckInsRecorded EventCheckIn[] @relation("EventCheckInRecordedBy")
 }
 
 model Department {
@@ -141,6 +173,8 @@ model Member {
   leadershipRecords LeadershipRecord[]
   membershipStatuses MembershipStatusHistory[]
   fellowships MemberFellowship[]
+  eventRegistrations EventRegistration[]
+  eventCheckIns EventCheckIn[]
 }
 
 model Service {
@@ -210,6 +244,8 @@ model Event {
   updatedAt             DateTime     @updatedAt
 
   attendances Attendance[]
+  registrations EventRegistration[]
+  checkIns EventCheckIn[]
 
   @@index([date])
   @@index([status, date])
@@ -275,6 +311,63 @@ model MemberInviteToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
+}
+
+model EventRegistration {
+  id                 String                  @id @default(uuid())
+  event              Event                   @relation(fields: [eventId], references: [id])
+  eventId            String
+  member             Member?                 @relation(fields: [memberId], references: [id])
+  memberId           String?
+  fullName           String
+  phoneNumber        String
+  phoneKey           String
+  email              String?
+  attendeeType       AttendeeType
+  registrationSource RegistrationSource
+  status             EventRegistrationStatus @default(REGISTERED)
+  registeredAt       DateTime                @default(now())
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  checkIn EventCheckIn?
+
+  @@unique([eventId, phoneKey])
+  @@unique([eventId, memberId])
+  @@index([eventId, status])
+  @@index([eventId, attendeeType])
+  @@index([memberId])
+  @@index([phoneKey])
+}
+
+model EventCheckIn {
+  id                  String        @id @default(uuid())
+  event               Event         @relation(fields: [eventId], references: [id])
+  eventId             String
+  registration        EventRegistration? @relation(fields: [registrationId], references: [id])
+  registrationId      String?       @unique
+  member              Member?       @relation(fields: [memberId], references: [id])
+  memberId            String?
+  fullNameSnapshot    String
+  phoneNumberSnapshot String
+  phoneKey            String
+  attendeeType        AttendeeType
+  checkInMethod       CheckInMethod
+  checkInSource       CheckInSource @default(TABLET)
+  accompanyingCount   Int           @default(0)
+  checkedInAt         DateTime      @default(now())
+  checkedInByUser     User?         @relation("EventCheckInRecordedBy", fields: [checkedInByUserId], references: [id])
+  checkedInByUserId   String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@unique([eventId, phoneKey])
+  @@unique([eventId, memberId])
+  @@index([eventId, checkedInAt])
+  @@index([eventId, attendeeType])
+  @@index([eventId, checkInMethod])
+  @@index([memberId])
+  @@index([phoneKey])
 }
 
 model VolunteerRecord {
