@@ -55,12 +55,25 @@ Base path: `/api/v1`
 - `PATCH /events/:id/cancel` — cancel an event.
 - `PATCH /events/:id/archive` — archive an event.
 - `PATCH /events/:id/restore` — restore a cancelled/archived event back to scheduled.
-- `POST /events/:id/register` — public event registration using `fullName`, `phoneNumber`, optional `email`.
+- `POST /events/:id/registration-token` — generate or rotate the public event registration token/link.
+- `POST /events/:id/check-in-token` — generate or rotate the public check-in token/link for an event.
+- `PATCH /events/:id/registration` — enable/disable public registration and optionally set `openAt` / `closeAt`.
+- `PATCH /events/:id/public-check-in` — enable/disable public phone check-in.
+- `PATCH /events/:id/qr-check-in` — enable/disable QR/mobile self check-in.
+- `POST /events/:id/register` — direct event registration by event id using `fullName`, `phoneNumber`, optional `email`.
 - `GET /events/:id/registrations` — admin/staff view of event registrations, supports `attendeeType`, `status`, `search`.
 - `POST /events/:id/check-in` — transactional attendee check-in; auto-registers if needed and prevents duplicates.
 - `GET /events/:id/attendance` — attendance list for an event, supports `attendeeType`, `method`, `search`, `checkedInFrom`, `checkedInTo`.
 - `GET /events/:id/attendance/summary` — totals for registered, checked-in, members, visitors, QR/manual, etc.
 - `GET /events/:id/attendance/timeline` — time-bucketed check-in counts for live dashboards, supports optional `bucketMinutes`.
+
+## Public Event Registration
+- `GET /public/events/register/:token` — fetch safe public event metadata for the pre-event registration page.
+- `POST /public/events/register/:token` — public event registration using `fullName`, `phoneNumber`, optional `email`; creates `EventRegistration` only.
+
+## Public Event Check-In
+- `GET /public/events/check-in/:token` — fetch safe public event metadata for mobile self check-in, including whether the current check-in window is open.
+- `POST /public/events/check-in/:token` — public self check-in using full name, phone number, and optional accompanying count; auto-registers first if needed, then creates `EventCheckIn`.
 
 ## Inventory
 - `POST /inventory` — create item.

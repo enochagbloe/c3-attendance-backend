@@ -2,6 +2,8 @@ import { CheckInMode, EventStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/appError';
 import { EventListQuery } from './events.validation';
+import crypto from 'crypto';
+import { env } from '../../config/env';
 
 export interface EventInput {
   title: string;
@@ -17,7 +19,13 @@ export interface EventInput {
   organizerDepartmentId?: string | null;
   organizerName?: string | null;
   audience?: string | null;
+  registrationEnabled?: boolean;
+  registrationOpenAt?: Date | string | null;
+  registrationCloseAt?: Date | string | null;
   qrCheckInEnabled?: boolean;
+  publicCheckInEnabled?: boolean;
+  checkInOpenAt?: Date | string | null;
+  checkInCloseAt?: Date | string | null;
   colorTag?: string | null;
 }
 
@@ -41,6 +49,14 @@ const eventInclude = {
 } satisfies Prisma.EventInclude;
 
 class EventsService {
+  private buildPublicRegistrationUrl(token: string) {
+    return `${env.publicRegistrationBaseUrl.replace(/\/$/, '')}/${token}`;
+  }
+
+  private buildPublicCheckInUrl(token: string) {
+    return `${env.publicCheckInBaseUrl.replace(/\/$/, '')}/${token}`;
+  }
+
   private timeToMinutes(value: string) {
     const [hours, minutes] = value.split(':').map(Number);
     return hours * 60 + minutes;
@@ -100,6 +116,8 @@ class EventsService {
   async create(data: EventInput) {
     this.assertTimeOrder(data.startTime, data.endTime);
     this.validateCheckInSettings(data);
+    const registrationToken = crypto.randomBytes(24).toString('hex');
+    const checkInToken = crypto.randomBytes(24).toString('hex');
 
     return prisma.event.create({
       data: {
@@ -116,6 +134,14 @@ class EventsService {
         organizerDepartmentId: data.organizerDepartmentId ?? null,
         organizerName: data.organizerName ?? null,
         audience: data.audience ?? null,
+        registrationToken,
+        registrationEnabled: data.registrationEnabled ?? true,
+        registrationOpenAt: data.registrationOpenAt ? new Date(data.registrationOpenAt) : null,
+        registrationCloseAt: data.registrationCloseAt ? new Date(data.registrationCloseAt) : null,
+        checkInToken,
+        publicCheckInEnabled: data.publicCheckInEnabled ?? false,
+        checkInOpenAt: data.checkInOpenAt ? new Date(data.checkInOpenAt) : null,
+        checkInCloseAt: data.checkInCloseAt ? new Date(data.checkInCloseAt) : null,
         qrCheckInEnabled: data.qrCheckInEnabled ?? false,
         colorTag: data.colorTag ?? null,
         cancelledAt: data.status === EventStatus.CANCELLED ? new Date() : null,
@@ -208,6 +234,15 @@ class EventsService {
           data.organizerDepartmentId === undefined ? undefined : data.organizerDepartmentId ?? null,
         organizerName: data.organizerName === undefined ? undefined : data.organizerName ?? null,
         audience: data.audience === undefined ? undefined : data.audience ?? null,
+        registrationEnabled: data.registrationEnabled,
+        registrationOpenAt:
+          data.registrationOpenAt === undefined ? undefined : data.registrationOpenAt ? new Date(data.registrationOpenAt) : null,
+        registrationCloseAt:
+          data.registrationCloseAt === undefined ? undefined : data.registrationCloseAt ? new Date(data.registrationCloseAt) : null,
+        publicCheckInEnabled: data.publicCheckInEnabled,
+        checkInOpenAt: data.checkInOpenAt === undefined ? undefined : data.checkInOpenAt ? new Date(data.checkInOpenAt) : null,
+        checkInCloseAt:
+          data.checkInCloseAt === undefined ? undefined : data.checkInCloseAt ? new Date(data.checkInCloseAt) : null,
         qrCheckInEnabled: data.qrCheckInEnabled,
         colorTag: data.colorTag === undefined ? undefined : data.colorTag ?? null,
       },
@@ -287,6 +322,205 @@ class EventsService {
       },
       include: eventInclude,
     });
+  }
+
+  async generateRegistrationToken(id: string, rotate = false) {
+    const event = await this.getExisting(id);
+
+    if (event.status === EventStatus.ARCHIVED) {
+      throw new AppError('Archived events cannot receive registration links', 409, 'INVALID_EVENT_STATUS');
+    }
+
+    const token = event.registrationToken && !rotate ? event.registrationToken : crypto.randomBytes(24).toString('hex');
+
+    const updated = await prisma.event.update({
+      where: { id },
+      data: {
+        registrationToken: token,
+      },
+      include: eventInclude,
+    });
+
+    return {
+      event: updated,
+      token,
+      publicRegistrationUrl: this.buildPublicRegistrationUrl(token),
+    };
+  }
+
+  async generateCheckInToken(id: string, rotate = false) {
+    const event = await this.getExisting(id);
+
+    if (event.status === EventStatus.ARCHIVED) {
+      throw new AppError('Archived events cannot receive public check-in links', 409, 'INVALID_EVENT_STATUS');
+    }
+
+    const token = event.checkInToken && !rotate ? event.checkInToken : crypto.randomBytes(24).toString('hex');
+
+    const updated = await prisma.event.update({
+      where: { id },
+      data: {
+        checkInToken: token,
+      },
+      include: eventInclude,
+    });
+
+    return {
+      event: updated,
+      token,
+      publicCheckInUrl: this.buildPublicCheckInUrl(token),
+    };
+  }
+
+  async setRegistrationAccess(
+    id: string,
+    enabled: boolean,
+    openAt?: Date | null,
+    closeAt?: Date | null
+  ) {
+    const event = await this.getExisting(id);
+
+    if (enabled) {
+      const current = await prisma.event.findUnique({ where: { id }, select: { registrationToken: true } });
+      if (!current?.registrationToken) {
+        await this.generateRegistrationToken(id, false);
+      }
+    }
+
+    return prisma.event.update({
+      where: { id },
+      data: {
+        registrationEnabled: enabled,
+        registrationOpenAt: openAt === undefined ? undefined : openAt,
+        registrationCloseAt: closeAt === undefined ? undefined : closeAt,
+      },
+      include: eventInclude,
+    });
+  }
+
+  async setPublicCheckInEnabled(
+    id: string,
+    enabled: boolean,
+    openAt?: Date | null,
+    closeAt?: Date | null
+  ) {
+    const event = await this.getExisting(id);
+
+    if (enabled && !event.attendanceEnabled) {
+      throw new AppError('Enable attendance for this event before public check-in.', 409, 'ATTENDANCE_DISABLED');
+    }
+
+    if (enabled) {
+      const current = await prisma.event.findUnique({ where: { id }, select: { checkInToken: true } });
+      if (!current?.checkInToken) {
+        await this.generateCheckInToken(id, false);
+      }
+    }
+
+    return prisma.event.update({
+      where: { id },
+      data: {
+        publicCheckInEnabled: enabled,
+        checkInOpenAt: openAt === undefined ? undefined : openAt,
+        checkInCloseAt: closeAt === undefined ? undefined : closeAt,
+      },
+      include: eventInclude,
+    });
+  }
+
+  async setQrCheckInEnabled(id: string, enabled: boolean) {
+    const event = await this.getExisting(id);
+
+    if (enabled && !event.attendanceEnabled) {
+      throw new AppError('Enable attendance for this event before QR check-in.', 409, 'ATTENDANCE_DISABLED');
+    }
+
+    if (enabled) {
+      const current = await prisma.event.findUnique({ where: { id }, select: { checkInToken: true } });
+      if (!current?.checkInToken) {
+        await this.generateCheckInToken(id, false);
+      }
+    }
+
+    return prisma.event.update({
+      where: { id },
+      data: { qrCheckInEnabled: enabled },
+      include: eventInclude,
+    });
+  }
+
+  async getPublicRegistrationEventByToken(token: string) {
+    const event = await prisma.event.findUnique({
+      where: { registrationToken: token },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        venue: true,
+        status: true,
+        registrationEnabled: true,
+        registrationOpenAt: true,
+        registrationCloseAt: true,
+      },
+    });
+
+    if (!event) {
+      throw new AppError('Registration link is invalid or expired.', 404, 'REGISTRATION_LINK_INVALID');
+    }
+
+    return {
+      eventId: event.id,
+      title: event.title,
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      venue: event.venue,
+      status: event.status,
+      registrationEnabled: event.registrationEnabled,
+      registrationOpenAt: event.registrationOpenAt,
+      registrationCloseAt: event.registrationCloseAt,
+    };
+  }
+
+  async getPublicCheckInEventByToken(token: string) {
+    const event = await prisma.event.findUnique({
+      where: { checkInToken: token },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        venue: true,
+        status: true,
+        attendanceEnabled: true,
+        publicCheckInEnabled: true,
+        qrCheckInEnabled: true,
+        checkInOpenAt: true,
+        checkInCloseAt: true,
+      },
+    });
+
+    if (!event) {
+      throw new AppError('Check-in link is invalid or expired.', 404, 'CHECKIN_LINK_INVALID');
+    }
+
+    return {
+      eventId: event.id,
+      title: event.title,
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      venue: event.venue,
+      status: event.status,
+      attendanceEnabled: event.attendanceEnabled,
+      publicCheckInEnabled: event.publicCheckInEnabled,
+      qrCheckInEnabled: event.qrCheckInEnabled,
+      checkInOpenAt: event.checkInOpenAt,
+      checkInCloseAt: event.checkInCloseAt,
+    };
   }
 }
 

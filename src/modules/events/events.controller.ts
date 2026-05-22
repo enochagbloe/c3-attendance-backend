@@ -89,6 +89,63 @@ class EventsController {
       return next(err);
     }
   }
+
+  async generateCheckInToken(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rotate = Boolean(req.body?.rotate);
+      const data = await eventsService.generateCheckInToken(this.getId(req), rotate);
+      return sendSuccess({ res, data, message: rotate ? 'Check-in token rotated' : 'Check-in token ready' });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async generateRegistrationToken(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rotate = Boolean(req.body?.rotate);
+      const data = await eventsService.generateRegistrationToken(this.getId(req), rotate);
+      return sendSuccess({ res, data, message: rotate ? 'Registration token rotated' : 'Registration token ready' });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async setRegistrationAccess(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await eventsService.setRegistrationAccess(
+        this.getId(req),
+        Boolean(req.body?.enabled),
+        req.body?.openAt ? new Date(req.body.openAt) : req.body?.openAt ?? undefined,
+        req.body?.closeAt ? new Date(req.body.closeAt) : req.body?.closeAt ?? undefined
+      );
+      return sendSuccess({ res, data, message: 'Event registration access updated' });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async setPublicCheckIn(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await eventsService.setPublicCheckInEnabled(
+        this.getId(req),
+        Boolean(req.body?.enabled),
+        req.body?.openAt ? new Date(req.body.openAt) : req.body?.openAt ?? undefined,
+        req.body?.closeAt ? new Date(req.body.closeAt) : req.body?.closeAt ?? undefined
+      );
+      return sendSuccess({ res, data, message: 'Public check-in updated' });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async setQrCheckIn(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await eventsService.setQrCheckInEnabled(this.getId(req), Boolean(req.body?.enabled));
+      return sendSuccess({ res, data, message: 'QR check-in updated' });
+    } catch (err) {
+      return next(err);
+    }
+  }
 }
 
 export const eventsController = new EventsController();

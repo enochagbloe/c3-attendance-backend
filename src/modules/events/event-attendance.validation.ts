@@ -11,6 +11,10 @@ const eventIdParam = z.object({
   id: z.string().uuid('Invalid event id'),
 });
 
+const tokenParam = z.object({
+  token: z.string().trim().min(1, 'token is required'),
+});
+
 export const registerForEventSchema = z.object({
   params: eventIdParam,
   body: z.object({
@@ -60,6 +64,32 @@ export const attendanceTimelineQuerySchema = z.object({
   params: eventIdParam,
   query: z.object({
     bucketMinutes: z.coerce.number().int().min(1).max(60).optional(),
+  }),
+});
+
+export const publicCheckInMetadataSchema = z.object({
+  params: tokenParam,
+});
+
+export const publicRegistrationMetadataSchema = z.object({
+  params: tokenParam,
+});
+
+export const publicRegistrationSchema = z.object({
+  params: tokenParam,
+  body: z.object({
+    fullName: z.string().trim().min(1, 'fullName is required'),
+    phoneNumber: z.string().trim().min(1, 'phoneNumber is required'),
+    email: z.string().email().optional(),
+  }),
+});
+
+export const publicCheckInSchema = z.object({
+  params: tokenParam,
+  body: z.object({
+    fullName: z.string().trim().min(1, 'fullName is required'),
+    phoneNumber: z.string().trim().min(1, 'phoneNumber is required'),
+    accompanyingCount: z.number().int().min(0).optional(),
   }),
 });
 

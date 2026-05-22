@@ -23,6 +23,12 @@ const eventBodyBase = z.object({
   organizerDepartmentId: z.string().uuid().optional().nullable(),
   organizerName: z.string().trim().min(1).optional().nullable(),
   audience: z.string().trim().min(1).optional().nullable(),
+  registrationEnabled: z.boolean().optional(),
+  registrationOpenAt: z.coerce.date().optional().nullable(),
+  registrationCloseAt: z.coerce.date().optional().nullable(),
+  publicCheckInEnabled: z.boolean().optional(),
+  checkInOpenAt: z.coerce.date().optional().nullable(),
+  checkInCloseAt: z.coerce.date().optional().nullable(),
   qrCheckInEnabled: z.boolean().optional(),
   colorTag: z.string().trim().min(1).optional().nullable(),
 });
@@ -48,6 +54,44 @@ export const updateEventSchema = z.object({
 
 export const idParamSchema = z.object({
   params: idParam,
+});
+
+export const togglePublicCheckInSchema = z.object({
+  params: idParam,
+  body: z.object({
+    enabled: z.boolean(),
+    openAt: z.coerce.date().optional().nullable(),
+    closeAt: z.coerce.date().optional().nullable(),
+  }),
+});
+
+export const generateCheckInTokenSchema = z.object({
+  params: idParam,
+  body: z
+    .object({
+      rotate: z.boolean().optional(),
+    })
+    .optional()
+    .default({}),
+});
+
+export const generateRegistrationTokenSchema = z.object({
+  params: idParam,
+  body: z
+    .object({
+      rotate: z.boolean().optional(),
+    })
+    .optional()
+    .default({}),
+});
+
+export const toggleRegistrationSchema = z.object({
+  params: idParam,
+  body: z.object({
+    enabled: z.boolean(),
+    openAt: z.coerce.date().optional().nullable(),
+    closeAt: z.coerce.date().optional().nullable(),
+  }),
 });
 
 const csvToArray = (value: unknown) => {
