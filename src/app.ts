@@ -14,6 +14,7 @@ import lookupsRoutes from './modules/lookups/lookups.routes';
 import settingsRoleRoutes from './modules/settings/roles.routes';
 import eventsRoutes from './modules/events/events.routes';
 import eventAttendanceRoutes from './modules/events/event-attendance.routes';
+import publicEventsRoutes from './modules/public/public-events.routes';
 import { sendError } from './utils/apiResponse';
 
 export function createApp() {
@@ -35,6 +36,7 @@ export function createApp() {
   app.use('/api/v1/inventory', inventoryRoutes);
   app.use('/api/v1/events', eventsRoutes);
   app.use('/api/v1/events', eventAttendanceRoutes);
+  app.use('/api/v1/public', publicEventsRoutes);
   app.use('/api/v1/users', usersRoutes);
   app.use('/api/v1/lookups', lookupsRoutes);
   app.use('/api/v1/settings', settingsRoleRoutes);

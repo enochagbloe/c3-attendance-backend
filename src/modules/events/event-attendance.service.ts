@@ -27,6 +27,18 @@ interface CheckInInput {
   checkInSource?: CheckInSource;
 }
 
+interface PublicCheckInInput {
+  fullName: string;
+  phoneNumber: string;
+  accompanyingCount?: number;
+}
+
+interface PublicRegistrationInput {
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+}
+
 const registrationInclude = {
   member: {
     select: {
@@ -76,7 +88,7 @@ const checkInInclude = {
 } satisfies Prisma.EventCheckInInclude;
 
 type RegisterOutcome = {
-  outcome: 'registered' | 'already_registered' | 'already_checked_in';
+  outcome: 'registered_existing_member' | 'registered_new_attendee' | 'already_registered';
   registration: Prisma.EventRegistrationGetPayload<{ include: typeof registrationInclude }>;
   matchedMember: Prisma.EventRegistrationGetPayload<{ include: typeof registrationInclude }>['member'];
 };
@@ -106,6 +118,12 @@ type CheckInOutcome =
     };
 
 class EventAttendanceService {
+  private readonly transactionOptions = {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout: 15_000,
+  };
+
   private async withRetry<T>(operation: () => Promise<T>, onConflict?: () => Promise<T>): Promise<T> {
     let lastError: unknown;
 
@@ -145,12 +163,16 @@ class EventAttendanceService {
       where: { id: eventId },
       select: {
         id: true,
+        createdAt: true,
         title: true,
         status: true,
         attendanceEnabled: true,
         date: true,
         startTime: true,
         endTime: true,
+        registrationEnabled: true,
+        registrationOpenAt: true,
+        registrationCloseAt: true,
         qrCheckInEnabled: true,
       },
     });
@@ -159,7 +181,7 @@ class EventAttendanceService {
       throw new AppError('Event not found', 404, 'EVENT_NOT_FOUND');
     }
 
-    if (!event.attendanceEnabled) {
+    if (mode === 'checkin' && !event.attendanceEnabled) {
       throw new AppError('Attendance is not enabled for this event', 400, 'ATTENDANCE_DISABLED');
     }
 
@@ -176,6 +198,171 @@ class EventAttendanceService {
     }
 
     return event;
+  }
+
+  private combineEventDateAndTime(date: Date, time: string) {
+    const [hours, minutes] = time.split(':').map(Number);
+    const combined = new Date(date);
+    combined.setHours(hours, minutes, 0, 0);
+    return combined;
+  }
+
+  private getEventDayStart(date: Date) {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    return startOfDay;
+  }
+
+  private getEventEndAt(event: { date: Date; endTime: string }) {
+    return this.combineEventDateAndTime(event.date, event.endTime);
+  }
+
+  private getDerivedRegistrationWindow(event: { createdAt: Date; date: Date; endTime: string }) {
+    return {
+      openAt: event.createdAt,
+      closeAt: this.getEventEndAt(event),
+    };
+  }
+
+  private getDerivedCheckInWindow(event: { date: Date; endTime: string }) {
+    const openAt = this.getEventDayStart(event.date);
+    const closeAt = this.getEventEndAt(event);
+    return { openAt, closeAt };
+  }
+
+  private async getPublicRegistrationEventByToken(token: string) {
+    const event = await prisma.event.findUnique({
+      where: { registrationToken: token },
+      select: {
+        id: true,
+        createdAt: true,
+        title: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        venue: true,
+        status: true,
+        registrationEnabled: true,
+        registrationOpenAt: true,
+        registrationCloseAt: true,
+      },
+    });
+
+    if (!event) {
+      throw new AppError('Registration link is invalid or expired.', 404, 'REGISTRATION_LINK_INVALID');
+    }
+
+    return event;
+  }
+
+  private async getPublicCheckInEventByToken(token: string) {
+    const event = await prisma.event.findUnique({
+      where: { checkInToken: token },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        venue: true,
+        status: true,
+        attendanceEnabled: true,
+        publicCheckInEnabled: true,
+        qrCheckInEnabled: true,
+        checkInOpenAt: true,
+        checkInCloseAt: true,
+      },
+    });
+
+    if (!event) {
+      throw new AppError('Check-in link is invalid or expired.', 404, 'CHECKIN_LINK_INVALID');
+    }
+
+    return event;
+  }
+
+  private getRegistrationAvailability(event: {
+    createdAt: Date;
+    date: Date;
+    endTime: string;
+    registrationEnabled: boolean;
+    registrationOpenAt: Date | null;
+    registrationCloseAt: Date | null;
+    status: EventStatus;
+  }) {
+    const now = new Date();
+    const derivedWindow = this.getDerivedRegistrationWindow(event);
+    const openAt = event.registrationOpenAt ?? derivedWindow.openAt;
+    const closeAt = event.registrationCloseAt ?? derivedWindow.closeAt;
+
+    if (!event.registrationEnabled) {
+      return { allowed: false, reason: 'Registration is not available for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.DRAFT) {
+      return { allowed: false, reason: 'Registration is not open yet for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.CANCELLED || event.status === EventStatus.ARCHIVED) {
+      return { allowed: false, reason: 'Registration is not available for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.COMPLETED) {
+      return { allowed: false, reason: 'Registration has closed for this event.', openAt, closeAt };
+    }
+
+    if (now < openAt) {
+      return { allowed: false, reason: 'Registration is not open yet for this event.', openAt, closeAt };
+    }
+
+    if (now > closeAt) {
+      return { allowed: false, reason: 'Registration has closed for this event.', openAt, closeAt };
+    }
+
+    return { allowed: true as const, openAt, closeAt };
+  }
+
+  private getCheckInAvailability(event: {
+    date: Date;
+    startTime: string;
+    endTime: string;
+    attendanceEnabled: boolean;
+    publicCheckInEnabled: boolean;
+    qrCheckInEnabled: boolean;
+    checkInOpenAt: Date | null;
+    checkInCloseAt: Date | null;
+    status: EventStatus;
+  }) {
+    const now = new Date();
+    const derivedWindow = this.getDerivedCheckInWindow(event);
+    const openAt = event.checkInOpenAt ?? derivedWindow.openAt;
+    const closeAt = event.checkInCloseAt ?? derivedWindow.closeAt;
+
+    if (!event.attendanceEnabled || (!event.publicCheckInEnabled && !event.qrCheckInEnabled)) {
+      return { allowed: false, reason: 'Check-in is not available for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.DRAFT) {
+      return { allowed: false, reason: 'Check-in is not open yet for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.CANCELLED || event.status === EventStatus.ARCHIVED) {
+      return { allowed: false, reason: 'Check-in is not available for this event.', openAt, closeAt };
+    }
+
+    if (event.status === EventStatus.COMPLETED) {
+      return { allowed: false, reason: 'Check-in has closed for this event.', openAt, closeAt };
+    }
+
+    if (now < openAt) {
+      return { allowed: false, reason: 'Check-in is not open yet for this event.', openAt, closeAt };
+    }
+
+    if (now > closeAt) {
+      return { allowed: false, reason: 'Check-in has closed for this event.', openAt, closeAt };
+    }
+
+    return { allowed: true as const, openAt, closeAt };
   }
 
   private async findMemberByPhone(tx: Prisma.TransactionClient, phoneNumber: string) {
@@ -253,7 +440,7 @@ class EventAttendanceService {
     }
 
     return {
-      outcome: registration.status === EventRegistrationStatus.CHECKED_IN ? 'already_checked_in' : 'already_registered',
+      outcome: 'already_registered',
       registration,
       matchedMember: registration.member,
     };
@@ -303,7 +490,25 @@ class EventAttendanceService {
       async () =>
         prisma.$transaction(
           async (tx) => {
-            await this.getEventForAttendance(tx, eventId, 'registration');
+            const mode = input.registrationSource === RegistrationSource.CHECKIN_AUTO ? 'checkin' : 'registration';
+            const event = await this.getEventForAttendance(tx, eventId, mode);
+
+            if (mode === 'registration') {
+              const availability = this.getRegistrationAvailability({
+                createdAt: event.createdAt,
+                date: event.date,
+                endTime: event.endTime,
+                registrationEnabled: event.registrationEnabled,
+                registrationOpenAt: event.registrationOpenAt,
+                registrationCloseAt: event.registrationCloseAt,
+                status: event.status,
+              });
+
+              if (!availability.allowed) {
+                throw new AppError(availability.reason, 409, 'REGISTRATION_NOT_AVAILABLE');
+              }
+            }
+
             const member = await this.findMemberByPhone(tx, input.phoneNumber);
             const attendeeType = member ? AttendeeType.MEMBER : AttendeeType.NEW_ATTENDEE;
             const existing = await this.findExistingRegistration(tx, eventId, phoneKey, member?.id);
@@ -325,11 +530,8 @@ class EventAttendanceService {
                     })
                   : existing;
 
-              const outcome: RegisterOutcome['outcome'] =
-                registration.status === EventRegistrationStatus.CHECKED_IN ? 'already_checked_in' : 'already_registered';
-
               return {
-                outcome,
+                outcome: 'already_registered',
                 registration,
                 matchedMember: registration.member,
               };
@@ -351,12 +553,12 @@ class EventAttendanceService {
             });
 
             return {
-              outcome: 'registered' as const,
+              outcome: member ? 'registered_existing_member' : 'registered_new_attendee',
               registration,
               matchedMember: registration.member,
             };
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+          this.transactionOptions
         ),
       async () => {
         const member = await this.findMemberByPhone(prisma as unknown as Prisma.TransactionClient, input.phoneNumber);
@@ -509,13 +711,102 @@ class EventAttendanceService {
               },
             };
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+          this.transactionOptions
         ),
       async () => {
         const member = await this.findMemberByPhone(prisma as unknown as Prisma.TransactionClient, input.phoneNumber);
         return this.readExistingCheckInOutcome(eventId, phoneKey, member?.id);
       }
     );
+  }
+
+  async getPublicRegistrationMetadata(token: string) {
+    const event = await this.getPublicRegistrationEventByToken(token);
+    const availability = this.getRegistrationAvailability(event);
+
+    return {
+      eventId: event.id,
+      title: event.title,
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      venue: event.venue,
+      status: event.status,
+      registrationAllowed: availability.allowed,
+      registrationOpenAt: availability.openAt,
+      registrationCloseAt: availability.closeAt,
+    };
+  }
+
+  async publicRegister(token: string, input: PublicRegistrationInput) {
+    const event = await this.getPublicRegistrationEventByToken(token);
+    const availability = this.getRegistrationAvailability(event);
+
+    if (!availability.allowed) {
+      throw new AppError(availability.reason, 409, 'PUBLIC_REGISTRATION_DISABLED');
+    }
+
+    const result = await this.register(event.id, {
+      fullName: input.fullName,
+      phoneNumber: input.phoneNumber,
+      email: input.email,
+      registrationSource: RegistrationSource.PRE_EVENT_FORM,
+    });
+
+    return {
+      ...result,
+      message:
+        result.outcome === 'already_registered'
+          ? 'You are already registered for this event.'
+          : 'You are registered successfully.',
+    };
+  }
+
+  async getPublicCheckInMetadata(token: string) {
+    const event = await this.getPublicCheckInEventByToken(token);
+    const availability = this.getCheckInAvailability(event);
+
+    return {
+      eventId: event.id,
+      title: event.title,
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      venue: event.venue,
+      status: event.status,
+      checkInAllowed: availability.allowed,
+      checkInOpenAt: availability.openAt,
+      checkInCloseAt: availability.closeAt,
+    };
+  }
+
+  async publicSelfCheckIn(token: string, input: PublicCheckInInput) {
+    const event = await this.getPublicCheckInEventByToken(token);
+    const availability = this.getCheckInAvailability(event);
+
+    if (!availability.allowed) {
+      throw new AppError(availability.reason, 409, 'PUBLIC_CHECKIN_DISABLED');
+    }
+
+    const result = await this.checkIn(
+      event.id,
+      {
+        fullName: input.fullName,
+        phoneNumber: input.phoneNumber,
+        accompanyingCount: input.accompanyingCount ?? 0,
+        checkInMethod: CheckInMethod.QR,
+        checkInSource: CheckInSource.SELF,
+      },
+      undefined
+    );
+
+    return {
+      ...result,
+      message:
+        result.outcome === 'already_checked_in'
+          ? 'You are already checked in for this event.'
+          : 'You are checked in successfully.',
+    };
   }
 
   async listAttendance(eventId: string, filters: AttendanceListQuery) {

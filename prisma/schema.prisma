@@ -236,6 +236,14 @@ model Event {
   organizerDepartmentId String?
   organizerName         String?
   audience              String?
+  registrationToken     String?      @unique
+  registrationEnabled   Boolean      @default(false)
+  registrationOpenAt    DateTime?
+  registrationCloseAt   DateTime?
+  checkInToken          String?      @unique
+  publicCheckInEnabled  Boolean      @default(false)
+  checkInOpenAt         DateTime?
+  checkInCloseAt        DateTime?
   qrCheckInEnabled      Boolean      @default(false)
   colorTag              String?
   archivedAt            DateTime?

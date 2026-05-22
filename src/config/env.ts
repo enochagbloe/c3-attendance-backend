@@ -21,4 +21,6 @@ export const env = {
   signupKey: process.env.SIGNUP_KEY || '',
   selfUpdateBaseUrl: process.env.SELF_UPDATE_BASE_URL || 'http://localhost:3000/member-self-update',
   selfRegisterBaseUrl: process.env.SELF_REGISTER_BASE_URL || 'http://localhost:3000/member-register',
+  publicRegistrationBaseUrl: process.env.PUBLIC_REGISTRATION_BASE_URL || 'http://localhost:3000/event-register',
+  publicCheckInBaseUrl: process.env.PUBLIC_CHECKIN_BASE_URL || 'http://localhost:3000/event-check-in',
 };
