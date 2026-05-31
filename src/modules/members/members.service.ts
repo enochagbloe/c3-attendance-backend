@@ -48,9 +48,65 @@ export interface CreateMemberInput {
 
 export interface UpdateMemberInput extends Partial<CreateMemberInput> {}
 
+const memberDetailInclude = {
+  department: true,
+  volunteerRecords: {
+    include: {
+      volunteerRole: true,
+      department: true,
+    },
+    orderBy: { startDate: 'asc' as const },
+  },
+  leadershipRecords: {
+    include: {
+      leadershipRole: true,
+    },
+    orderBy: { startDate: 'asc' as const },
+  },
+  membershipStatuses: {
+    orderBy: { effectiveDate: 'asc' as const },
+  },
+  fellowships: {
+    include: {
+      fellowship: true,
+    },
+    orderBy: { joinedAt: 'asc' as const },
+  },
+} satisfies Prisma.MemberInclude;
+
+type MemberDetailRecord = Prisma.MemberGetPayload<{
+  include: typeof memberDetailInclude;
+}>;
+
 class MembersService {
   private buildFrontendUrl(pathname: string) {
     return `${env.frontendBaseUrl.replace(/\/$/, '')}${pathname}`;
+  }
+
+  private serializeMemberDetail(member: MemberDetailRecord) {
+    return {
+      ...member,
+      department: member.department
+        ? { id: member.department.id, name: member.department.name }
+        : null,
+      volunteerActive: member.volunteerRecords.length > 0,
+      leadershipActive: member.leadershipRecords.length > 0,
+      fellowships: member.fellowships.map(({ fellowship }) => ({
+        id: fellowship.id,
+        name: fellowship.name,
+      })),
+      fellowshipIds: member.fellowships.map(({ fellowshipId }) => fellowshipId),
+      hasFamily: member.hasFamilyMemberAtChurch,
+      familyName: member.familyMemberName,
+      familyPhone: member.familyMemberPhone,
+    };
+  }
+
+  private async getDetailedMemberById(id: string) {
+    return prisma.member.findUnique({
+      where: { id },
+      include: memberDetailInclude,
+    });
   }
 
   private async assertNotDuplicate(data: CreateMemberInput, ignoreId?: string) {
@@ -124,7 +180,7 @@ class MembersService {
         ? data.membershipStatuses
         : [{ status: data.primaryMembershipStatus, effectiveDate: now }];
 
-    return prisma.$transaction(async (tx) => {
+    const memberId = await prisma.$transaction(async (tx) => {
       const member = await tx.member.create({
         data: {
           firstName: data.firstName,
@@ -197,8 +253,16 @@ class MembersService {
         });
       }
 
-      return member;
+      return member.id;
     });
+
+    const createdMember = await this.getDetailedMemberById(memberId);
+
+    if (!createdMember) {
+      throw new AppError('Member not found after creation', 500, 'MEMBER_CREATE_FAILED');
+    }
+
+    return this.serializeMemberDetail(createdMember);
   }
 
   async list(includeDeleted = false, page = 1, limit = 20) {
@@ -227,11 +291,11 @@ class MembersService {
   }
 
   async getById(id: string) {
-    const member = await prisma.member.findUnique({ where: { id } });
+    const member = await this.getDetailedMemberById(id);
     if (!member || member.isDeleted) {
       throw new AppError('Member not found', 404, 'NOT_FOUND');
     }
-    return member;
+    return this.serializeMemberDetail(member);
   }
 
   async update(id: string, data: UpdateMemberInput) {
@@ -266,7 +330,7 @@ class MembersService {
     this.validateBusinessRules(merged);
     await this.assertNotDuplicate(merged, id);
 
-    return prisma.$transaction(async (tx) => {
+    const updatedMemberId = await prisma.$transaction(async (tx) => {
       const member = await tx.member.update({
         where: { id },
         data: {
@@ -346,8 +410,15 @@ class MembersService {
         }
       }
 
-      return member;
+      return member.id;
     });
+
+    const updatedMember = await this.getDetailedMemberById(updatedMemberId);
+    if (!updatedMember) {
+      throw new AppError('Member not found after update', 500, 'MEMBER_UPDATE_FAILED');
+    }
+
+    return this.serializeMemberDetail(updatedMember);
   }
 
   async softDelete(id: string) {

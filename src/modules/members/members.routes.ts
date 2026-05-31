@@ -8,6 +8,16 @@ import { MemberStatus } from '@prisma/client';
 
 const router = Router();
 
+const isoDateInput = z.preprocess(
+  (value) => {
+    if (value === '' || value === null) {
+      return undefined;
+    }
+    return value;
+  },
+  z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid ISO date')
+);
+
 const baseMember = {
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -16,8 +26,8 @@ const baseMember = {
   departmentId: z.string().uuid().optional().nullable(),
   gender: z.string().optional(),
   primaryMembershipStatus: z.nativeEnum(MemberStatus),
-  dateOfBirth: z.string().date().optional(),
-  joinedAt: z.string().date().optional(),
+  dateOfBirth: isoDateInput.optional(),
+  joinedAt: isoDateInput.optional(),
   baptizedHere: z.boolean().optional(),
   maritalStatus: z.string().min(1),
   area: z.string().optional(),
@@ -36,8 +46,8 @@ const baseMember = {
         volunteerRoleId: z.string().uuid(),
         departmentId: z.string().uuid().optional().nullable(),
         ministryName: z.string().optional(),
-        startDate: z.string().date(),
-        endDate: z.string().date().optional(),
+        startDate: isoDateInput,
+        endDate: isoDateInput.optional(),
       })
     )
     .optional(),
@@ -45,8 +55,8 @@ const baseMember = {
     .array(
       z.object({
         leadershipRoleId: z.string().uuid(),
-        startDate: z.string().date(),
-        endDate: z.string().date().optional(),
+        startDate: isoDateInput,
+        endDate: isoDateInput.optional(),
       })
     )
     .optional(),
@@ -55,8 +65,8 @@ const baseMember = {
     .array(
       z.object({
         status: z.nativeEnum(MemberStatus),
-        effectiveDate: z.string().date(),
-        endDate: z.string().date().optional(),
+        effectiveDate: isoDateInput,
+        endDate: isoDateInput.optional(),
       })
     )
     .optional(),
@@ -114,6 +124,9 @@ router.post('/', authorize([Permissions.CREATE_MEMBERS]), validate(createSchema)
 );
 router.get('/:id', authorize(Permissions.VIEW_MEMBERS), validate(idParamSchema), (req, res, next) =>
   membersController.getById(req, res, next)
+);
+router.patch('/:id', authorize([Permissions.UPDATE_MEMBERS]), validate(updateSchema), (req, res, next) =>
+  membersController.update(req, res, next)
 );
 router.put('/:id', authorize([Permissions.UPDATE_MEMBERS]), validate(updateSchema), (req, res, next) =>
   membersController.update(req, res, next)
