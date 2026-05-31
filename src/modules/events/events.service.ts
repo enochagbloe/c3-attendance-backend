@@ -49,12 +49,24 @@ const eventInclude = {
 } satisfies Prisma.EventInclude;
 
 class EventsService {
+  private buildFrontendUrl(pathname: string) {
+    return `${env.frontendBaseUrl.replace(/\/$/, '')}${pathname}`;
+  }
+
   private buildPublicRegistrationUrl(token: string) {
-    return `${env.publicRegistrationBaseUrl.replace(/\/$/, '')}/${token}`;
+    return this.buildFrontendUrl(`/event-register/${token}`);
   }
 
   private buildPublicCheckInUrl(token: string) {
-    return `${env.publicCheckInBaseUrl.replace(/\/$/, '')}/${token}`;
+    return this.buildFrontendUrl(`/event-check-in/${token}`);
+  }
+
+  private enrichEventUrls<T extends { registrationToken?: string | null; checkInToken?: string | null }>(event: T) {
+    return {
+      ...event,
+      registrationUrl: event.registrationToken ? this.buildPublicRegistrationUrl(event.registrationToken) : null,
+      checkInUrl: event.checkInToken ? this.buildPublicCheckInUrl(event.checkInToken) : null,
+    };
   }
 
   private timeToMinutes(value: string) {
@@ -119,7 +131,7 @@ class EventsService {
     const registrationToken = crypto.randomBytes(24).toString('hex');
     const checkInToken = crypto.randomBytes(24).toString('hex');
 
-    return prisma.event.create({
+    const event = await prisma.event.create({
       data: {
         title: data.title,
         type: data.type,
@@ -149,6 +161,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(event);
   }
 
   async list(filters: EventListQuery) {
@@ -191,15 +205,18 @@ class EventsService {
       }
     }
 
-    return prisma.event.findMany({
+    const events = await prisma.event.findMany({
       where,
       include: eventInclude,
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
     });
+
+    return events.map((event) => this.enrichEventUrls(event));
   }
 
   async getById(id: string) {
-    return this.getExisting(id);
+    const event = await this.getExisting(id);
+    return this.enrichEventUrls(event);
   }
 
   async update(id: string, data: EventUpdateInput) {
@@ -217,7 +234,7 @@ class EventsService {
     this.assertTimeOrder(merged.startTime, merged.endTime);
     this.validateCheckInSettings(merged);
 
-    return prisma.event.update({
+    const event = await prisma.event.update({
       where: { id },
       data: {
         title: data.title,
@@ -248,6 +265,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(event);
   }
 
   async delete(id: string) {
@@ -276,10 +295,10 @@ class EventsService {
     }
 
     if (event.status === EventStatus.CANCELLED) {
-      return event;
+      return this.enrichEventUrls(event);
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: {
         status: EventStatus.CANCELLED,
@@ -287,16 +306,18 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async archive(id: string) {
     const event = await this.getExisting(id);
 
     if (event.status === EventStatus.ARCHIVED) {
-      return event;
+      return this.enrichEventUrls(event);
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: {
         status: EventStatus.ARCHIVED,
@@ -304,6 +325,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async restore(id: string) {
@@ -313,7 +336,7 @@ class EventsService {
       throw new AppError('Only cancelled or archived events can be restored', 409, 'INVALID_EVENT_STATUS');
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: {
         status: EventStatus.SCHEDULED,
@@ -322,6 +345,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async generateRegistrationToken(id: string, rotate = false) {
@@ -342,9 +367,9 @@ class EventsService {
     });
 
     return {
-      event: updated,
+      event: this.enrichEventUrls(updated),
       token,
-      publicRegistrationUrl: this.buildPublicRegistrationUrl(token),
+      registrationUrl: this.buildPublicRegistrationUrl(token),
     };
   }
 
@@ -366,9 +391,9 @@ class EventsService {
     });
 
     return {
-      event: updated,
+      event: this.enrichEventUrls(updated),
       token,
-      publicCheckInUrl: this.buildPublicCheckInUrl(token),
+      checkInUrl: this.buildPublicCheckInUrl(token),
     };
   }
 
@@ -387,7 +412,7 @@ class EventsService {
       }
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: {
         registrationEnabled: enabled,
@@ -396,6 +421,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async setPublicCheckInEnabled(
@@ -417,7 +444,7 @@ class EventsService {
       }
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: {
         publicCheckInEnabled: enabled,
@@ -426,6 +453,8 @@ class EventsService {
       },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async setQrCheckInEnabled(id: string, enabled: boolean) {
@@ -442,11 +471,13 @@ class EventsService {
       }
     }
 
-    return prisma.event.update({
+    const updated = await prisma.event.update({
       where: { id },
       data: { qrCheckInEnabled: enabled },
       include: eventInclude,
     });
+
+    return this.enrichEventUrls(updated);
   }
 
   async getPublicRegistrationEventByToken(token: string) {
