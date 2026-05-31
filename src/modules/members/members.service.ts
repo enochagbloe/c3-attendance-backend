@@ -49,6 +49,10 @@ export interface CreateMemberInput {
 export interface UpdateMemberInput extends Partial<CreateMemberInput> {}
 
 class MembersService {
+  private buildFrontendUrl(pathname: string) {
+    return `${env.frontendBaseUrl.replace(/\/$/, '')}${pathname}`;
+  }
+
   private async assertNotDuplicate(data: CreateMemberInput, ignoreId?: string) {
     const conditions = [];
     if (data.email) {
@@ -360,7 +364,7 @@ class MembersService {
       data: { token, memberId, expiresAt },
     });
 
-    const url = `${env.selfUpdateBaseUrl}?token=${token}`;
+    const url = `${this.buildFrontendUrl('/member-self-update')}?token=${token}`;
     return {
       memberId: member.id,
       token,
@@ -378,7 +382,7 @@ class MembersService {
       data: { token, expiresAt },
     });
 
-    const url = `${env.selfRegisterBaseUrl}?token=${token}`;
+    const url = `${this.buildFrontendUrl('/member-register')}?token=${token}`;
     return { token, expiresAt, url, qrPayload: url };
   }
 

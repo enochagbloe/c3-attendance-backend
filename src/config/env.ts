@@ -18,7 +18,5 @@ export const env = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   logLevel: process.env.LOG_LEVEL || 'info',
   signupKey: process.env.SIGNUP_KEY || '',
-  selfUpdateBaseUrl: process.env.SELF_UPDATE_BASE_URL || 'http://localhost:3000/member-self-update',
-  selfRegisterBaseUrl: process.env.SELF_REGISTER_BASE_URL || 'http://localhost:3000/member-register',
   frontendBaseUrl: process.env.FRONTEND_BASE_URL || '',
 };

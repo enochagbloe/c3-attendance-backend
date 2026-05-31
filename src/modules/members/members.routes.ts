@@ -99,6 +99,11 @@ const selfRegisterSchema = z.object({
   }),
 });
 
+// Public invite-based registration must stay open so members can use the shared link without a bearer token.
+router.post('/self-register', validate(selfRegisterSchema), (req, res, next) =>
+  membersController.selfRegister(req, res, next)
+);
+
 router.use(authenticate);
 
 router.get('/', authorize(Permissions.VIEW_MEMBERS), validate(listQuerySchema), (req, res, next) =>
@@ -127,11 +132,6 @@ router.post(
   authorize(Permissions.VIEW_MEMBERS),
   validate(inviteLinkSchema),
   (req, res, next) => membersController.inviteLink(req, res, next)
-);
-
-// public endpoint for invited self-registration
-router.post('/self-register', validate(selfRegisterSchema), (req, res, next) =>
-  membersController.selfRegister(req, res, next)
 );
 
 export default router;
