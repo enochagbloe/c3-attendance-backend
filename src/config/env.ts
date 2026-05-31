@@ -3,13 +3,12 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-const required = ['DATABASE_URL', 'JWT_SECRET'];
-required.forEach((key) => {
-  if (!process.env[key]) {
-    // eslint-disable-next-line no-console
-    console.warn(`[env] Missing required env var ${key}.`);
-  }
-});
+const required = ['DATABASE_URL', 'JWT_SECRET', 'FRONTEND_BASE_URL'];
+const missingRequired = required.filter((key) => !process.env[key]);
+
+if (missingRequired.length > 0) {
+  throw new Error(`[env] Missing required env var(s): ${missingRequired.join(', ')}`);
+}
 
 export const env = {
   port: Number(process.env.PORT) || 4000,
@@ -21,6 +20,5 @@ export const env = {
   signupKey: process.env.SIGNUP_KEY || '',
   selfUpdateBaseUrl: process.env.SELF_UPDATE_BASE_URL || 'http://localhost:3000/member-self-update',
   selfRegisterBaseUrl: process.env.SELF_REGISTER_BASE_URL || 'http://localhost:3000/member-register',
-  publicRegistrationBaseUrl: process.env.PUBLIC_REGISTRATION_BASE_URL || 'http://localhost:3000/event-register',
-  publicCheckInBaseUrl: process.env.PUBLIC_CHECKIN_BASE_URL || 'http://localhost:3000/event-check-in',
+  frontendBaseUrl: process.env.FRONTEND_BASE_URL || '',
 };
