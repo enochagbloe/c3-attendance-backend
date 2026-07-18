@@ -1,4 +1,4 @@
-import { CheckInMode, EventStatus, Prisma } from '@prisma/client';
+import { CheckInMode, EventStatus, EventVolunteerAssignmentStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/appError';
 import { EventListQuery } from './events.validation';
@@ -67,6 +67,92 @@ class EventsService {
       registrationUrl: event.registrationToken ? this.buildPublicRegistrationUrl(event.registrationToken) : null,
       checkInUrl: event.checkInToken ? this.buildPublicCheckInUrl(event.checkInToken) : null,
     };
+  }
+
+  private async enrichEventsWithAssignmentIndicators<
+    T extends { id: string; registrationToken?: string | null; checkInToken?: string | null }
+  >(events: T[]) {
+    if (events.length === 0) {
+      return [];
+    }
+
+    const eventIds = events.map((event) => event.id);
+    const [counts, statusRows, previews] = await Promise.all([
+      prisma.eventVolunteerAssignment.groupBy({
+        by: ['eventId'],
+        where: {
+          eventId: { in: eventIds },
+          status: { not: EventVolunteerAssignmentStatus.CANCELLED },
+        },
+        _count: { _all: true },
+      }),
+      prisma.eventVolunteerAssignment.groupBy({
+        by: ['eventId', 'status'],
+        where: {
+          eventId: { in: eventIds },
+          status: {
+            in: [
+              EventVolunteerAssignmentStatus.PENDING,
+              EventVolunteerAssignmentStatus.ACCEPTED,
+              EventVolunteerAssignmentStatus.DECLINED,
+            ],
+          },
+        },
+        _count: { _all: true },
+      }),
+      prisma.eventVolunteerAssignment.findMany({
+        where: {
+          eventId: { in: eventIds },
+          status: { not: EventVolunteerAssignmentStatus.CANCELLED },
+        },
+        orderBy: [{ assignedAt: 'desc' }],
+        select: {
+          eventId: true,
+          memberId: true,
+          member: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const countMap = new Map(counts.map((row) => [row.eventId, row._count._all]));
+    const statusMap = new Map<string, { pending: number; accepted: number; declined: number }>();
+
+    for (const row of statusRows) {
+      const current = statusMap.get(row.eventId) ?? { pending: 0, accepted: 0, declined: 0 };
+      if (row.status === EventVolunteerAssignmentStatus.PENDING) current.pending = row._count._all;
+      if (row.status === EventVolunteerAssignmentStatus.ACCEPTED) current.accepted = row._count._all;
+      if (row.status === EventVolunteerAssignmentStatus.DECLINED) current.declined = row._count._all;
+      statusMap.set(row.eventId, current);
+    }
+
+    const previewMap = new Map<string, Array<{ id: string; fullName: string; avatarUrl: null }>>();
+    for (const row of previews) {
+      const current = previewMap.get(row.eventId) ?? [];
+      if (current.length >= 3 || current.some((entry) => entry.id === row.member.id)) {
+        previewMap.set(row.eventId, current);
+        continue;
+      }
+
+      current.push({
+        id: row.member.id,
+        fullName: `${row.member.firstName} ${row.member.lastName}`.trim(),
+        avatarUrl: null,
+      });
+      previewMap.set(row.eventId, current);
+    }
+
+    return events.map((event) => ({
+      ...this.enrichEventUrls(event),
+      assignedVolunteersCount: countMap.get(event.id) ?? 0,
+      assignmentStatusSummary: statusMap.get(event.id) ?? { pending: 0, accepted: 0, declined: 0 },
+      assignedVolunteerPreview: previewMap.get(event.id) ?? [],
+    }));
   }
 
   private timeToMinutes(value: string) {
@@ -162,7 +248,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(event);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([event]);
+    return enriched;
   }
 
   async list(filters: EventListQuery) {
@@ -211,12 +298,13 @@ class EventsService {
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
     });
 
-    return events.map((event) => this.enrichEventUrls(event));
+    return this.enrichEventsWithAssignmentIndicators(events);
   }
 
   async getById(id: string) {
     const event = await this.getExisting(id);
-    return this.enrichEventUrls(event);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([event]);
+    return enriched;
   }
 
   async update(id: string, data: EventUpdateInput) {
@@ -266,7 +354,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(event);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([event]);
+    return enriched;
   }
 
   async delete(id: string) {
@@ -295,7 +384,8 @@ class EventsService {
     }
 
     if (event.status === EventStatus.CANCELLED) {
-      return this.enrichEventUrls(event);
+      const [enriched] = await this.enrichEventsWithAssignmentIndicators([event]);
+      return enriched;
     }
 
     const updated = await prisma.event.update({
@@ -307,14 +397,16 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async archive(id: string) {
     const event = await this.getExisting(id);
 
     if (event.status === EventStatus.ARCHIVED) {
-      return this.enrichEventUrls(event);
+      const [enriched] = await this.enrichEventsWithAssignmentIndicators([event]);
+      return enriched;
     }
 
     const updated = await prisma.event.update({
@@ -326,7 +418,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async restore(id: string) {
@@ -346,7 +439,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async generateRegistrationToken(id: string, rotate = false) {
@@ -367,7 +461,7 @@ class EventsService {
     });
 
     return {
-      event: this.enrichEventUrls(updated),
+      event: (await this.enrichEventsWithAssignmentIndicators([updated]))[0],
       token,
       registrationUrl: this.buildPublicRegistrationUrl(token),
     };
@@ -391,7 +485,7 @@ class EventsService {
     });
 
     return {
-      event: this.enrichEventUrls(updated),
+      event: (await this.enrichEventsWithAssignmentIndicators([updated]))[0],
       token,
       checkInUrl: this.buildPublicCheckInUrl(token),
     };
@@ -422,7 +516,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async setPublicCheckInEnabled(
@@ -454,7 +549,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async setQrCheckInEnabled(id: string, enabled: boolean) {
@@ -477,7 +573,8 @@ class EventsService {
       include: eventInclude,
     });
 
-    return this.enrichEventUrls(updated);
+    const [enriched] = await this.enrichEventsWithAssignmentIndicators([updated]);
+    return enriched;
   }
 
   async getPublicRegistrationEventByToken(token: string) {

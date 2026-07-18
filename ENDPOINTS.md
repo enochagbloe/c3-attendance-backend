@@ -48,7 +48,7 @@ Base path: `/api/v1`
 
 ## Events
 - `POST /events` — create an event for the calendar.
-- `GET /events` — list/query events for calendar views. Supports `search`, `type`, `status`, `startDate`, `endDate`, `attendanceEnabled`, `qrCheckInEnabled`.
+- `GET /events` — list/query events for calendar views. Supports `search`, `type`, `status`, `startDate`, `endDate`, `attendanceEnabled`, `qrCheckInEnabled`. Also returns lightweight assignment indicators: `assignedVolunteersCount`, `assignmentStatusSummary`, `assignedVolunteerPreview`.
 - `GET /events/:id` — full event details.
 - `PATCH /events/:id` — update an event.
 - `DELETE /events/:id` — delete an event if no attendance has been recorded.
@@ -66,6 +66,16 @@ Base path: `/api/v1`
 - `GET /events/:id/attendance` — attendance list for an event, supports `attendeeType`, `method`, `search`, `checkedInFrom`, `checkedInTo`.
 - `GET /events/:id/attendance/summary` — totals for registered, checked-in, members, visitors, QR/manual, etc.
 - `GET /events/:id/attendance/timeline` — time-bucketed check-in counts for live dashboards, supports optional `bucketMinutes`.
+- `POST /events/:eventId/volunteer-assignments` — add a volunteer/team assignment to an event.
+- `GET /events/:eventId/volunteer-assignments` — list event volunteer assignments; supports `status`, `volunteerRoleId`, `departmentId`, `search`. Includes member display data for avatar stacks.
+- `GET /events/:eventId/volunteer-assignments/summary` — summary counts for event assignments.
+- `GET /events/:eventId/volunteer-assignments/:assignmentId` — get one assignment.
+- `PATCH /events/:eventId/volunteer-assignments/:assignmentId` — update assignment details or status.
+- `DELETE /events/:eventId/volunteer-assignments/:assignmentId` — delete a fresh assignment or cancel one with history.
+
+## Event Operations
+- `GET /operations/team` — operations workforce directory; supports `search`, `departmentId`, `volunteerRoleId`, `leadershipRoleId`, `status`, `availability`, `hasUpcomingAssignments`.
+- `GET /operations/team/summary` — operations workforce summary cards.
 
 ## Public Event Registration
 - `GET /public/events/register/:token` — fetch safe public event metadata for the pre-event registration page.

@@ -11,9 +11,11 @@ import servicesRoutes from './modules/services/services.routes';
 import inventoryRoutes from './modules/inventory/inventory.routes';
 import usersRoutes from './modules/users/users.routes';
 import lookupsRoutes from './modules/lookups/lookups.routes';
+import operationsRoutes from './modules/operations/operations.routes';
 import settingsRoleRoutes from './modules/settings/roles.routes';
 import eventsRoutes from './modules/events/events.routes';
 import eventAttendanceRoutes from './modules/events/event-attendance.routes';
+import volunteerAssignmentsRoutes from './modules/events/volunteer-assignments.routes';
 import publicEventsRoutes from './modules/public/public-events.routes';
 import { sendError } from './utils/apiResponse';
 
@@ -36,9 +38,11 @@ export function createApp() {
   app.use('/api/v1/inventory', inventoryRoutes);
   app.use('/api/v1/events', eventsRoutes);
   app.use('/api/v1/events', eventAttendanceRoutes);
+  app.use('/api/v1/events', volunteerAssignmentsRoutes);
   app.use('/api/v1/public', publicEventsRoutes);
   app.use('/api/v1/users', usersRoutes);
   app.use('/api/v1/lookups', lookupsRoutes);
+  app.use('/api/v1/operations', operationsRoutes);
   app.use('/api/v1/settings', settingsRoleRoutes);
 
   app.use((_req, res) => sendError({ res, message: 'Route not found', statusCode: 404, code: 'NOT_FOUND' }));

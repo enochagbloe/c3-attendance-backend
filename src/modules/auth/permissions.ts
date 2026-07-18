@@ -17,6 +17,9 @@ export const Permissions = {
   CHECKIN_ATTENDEES: 'canCheckInAttendees',
   VIEW_REGISTRATIONS: 'canViewRegistrations',
   MANAGE_EVENT_ATTENDANCE: 'canManageEventAttendance',
+  VIEW_EVENT_ASSIGNMENTS: 'canViewEventAssignments',
+  MANAGE_EVENT_ASSIGNMENTS: 'canManageEventAssignments',
+  VIEW_OPERATIONS_TEAM: 'canViewOperationsTeam',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];
@@ -40,6 +43,9 @@ export const rolePermissions: Record<Role, PermissionKey[]> = {
     Permissions.CHECKIN_ATTENDEES,
     Permissions.VIEW_REGISTRATIONS,
     Permissions.MANAGE_EVENT_ATTENDANCE,
+    Permissions.VIEW_EVENT_ASSIGNMENTS,
+    Permissions.MANAGE_EVENT_ASSIGNMENTS,
+    Permissions.VIEW_OPERATIONS_TEAM,
   ],
   [Role.PASTOR]: [
     Permissions.VIEW_MEMBERS,
@@ -48,6 +54,8 @@ export const rolePermissions: Record<Role, PermissionKey[]> = {
     Permissions.VIEW_REPORTS,
     Permissions.VIEW_EVENTS,
     Permissions.VIEW_REGISTRATIONS,
+    Permissions.VIEW_EVENT_ASSIGNMENTS,
+    Permissions.VIEW_OPERATIONS_TEAM,
   ],
   [Role.CHECKIN_STAFF]: [
     Permissions.CHECKIN_MEMBERS,
@@ -56,6 +64,7 @@ export const rolePermissions: Record<Role, PermissionKey[]> = {
     Permissions.VIEW_EVENTS,
     Permissions.CHECKIN_ATTENDEES,
     Permissions.VIEW_REGISTRATIONS,
+    Permissions.VIEW_EVENT_ASSIGNMENTS,
   ],
   [Role.INVENTORY_MANAGER]: [Permissions.MANAGE_INVENTORY, Permissions.VIEW_INVENTORY],
   [Role.DEPARTMENT_LEADER]: [
@@ -64,5 +73,7 @@ export const rolePermissions: Record<Role, PermissionKey[]> = {
     Permissions.VIEW_SERVICES,
     Permissions.VIEW_EVENTS,
     Permissions.VIEW_REGISTRATIONS,
+    Permissions.VIEW_EVENT_ASSIGNMENTS,
+    Permissions.VIEW_OPERATIONS_TEAM,
   ],
 };

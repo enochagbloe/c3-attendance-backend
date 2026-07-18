@@ -86,6 +86,15 @@ enum CheckInSource {
   TABLET
 }
 
+enum EventVolunteerAssignmentStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
 enum InventoryCondition {
   NEW
   GOOD
@@ -118,6 +127,7 @@ model User {
   departmentsLed    Department[] @relation("DepartmentLeader")
   passwordResetTokens PasswordResetToken[]
   eventCheckInsRecorded EventCheckIn[] @relation("EventCheckInRecordedBy")
+  eventVolunteerAssignmentsCreated EventVolunteerAssignment[] @relation("EventVolunteerAssignmentAssignedBy")
 }
 
 model Department {
@@ -133,6 +143,7 @@ model Department {
   members Member[]
   volunteerRecords VolunteerRecord[]
   organizedEvents Event[]
+  eventVolunteerAssignments EventVolunteerAssignment[]
 }
 
 model Member {
@@ -175,6 +186,7 @@ model Member {
   fellowships MemberFellowship[]
   eventRegistrations EventRegistration[]
   eventCheckIns EventCheckIn[]
+  eventVolunteerAssignments EventVolunteerAssignment[]
 }
 
 model Service {
@@ -254,11 +266,41 @@ model Event {
   attendances Attendance[]
   registrations EventRegistration[]
   checkIns EventCheckIn[]
+  volunteerAssignments EventVolunteerAssignment[]
 
   @@index([date])
   @@index([status, date])
   @@index([type, date])
   @@index([attendanceEnabled, date])
+}
+
+model EventVolunteerAssignment {
+  id               String                        @id @default(uuid())
+  event            Event                         @relation(fields: [eventId], references: [id])
+  eventId          String
+  member           Member                        @relation(fields: [memberId], references: [id])
+  memberId         String
+  volunteerRole    VolunteerRole?               @relation(fields: [volunteerRoleId], references: [id])
+  volunteerRoleId  String?
+  department       Department?                  @relation(fields: [departmentId], references: [id])
+  departmentId     String?
+  assignmentTitle  String?
+  assignmentKey    String
+  status           EventVolunteerAssignmentStatus @default(PENDING)
+  notes            String?
+  assignedByUser   User?                         @relation("EventVolunteerAssignmentAssignedBy", fields: [assignedByUserId], references: [id])
+  assignedByUserId String?
+  assignedAt       DateTime                      @default(now())
+  respondedAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  @@unique([eventId, memberId, assignmentKey])
+  @@index([eventId, status])
+  @@index([eventId, volunteerRoleId])
+  @@index([eventId, departmentId])
+  @@index([memberId, status])
 }
 
 model InventoryItem {
@@ -431,6 +473,7 @@ model VolunteerRole {
   updatedAt   DateTime @updatedAt
 
   volunteerRecords VolunteerRecord[]
+  eventVolunteerAssignments EventVolunteerAssignment[]
 }
 
 model Fellowship {
